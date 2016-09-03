@@ -3,6 +3,7 @@
 		"ext-mbstring": "*",
 		"ext-gd": "*",
 		"ext-ldap": "*",
-		"ext-imap": "*"
+		"ext-imap": "*",
+		"ext-memcached": "*"
 	}
 }
