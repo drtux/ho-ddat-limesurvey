@@ -15,10 +15,10 @@ if ( !defined('BASEPATH')) exit('No direct script access allowed');
 
 /**
  *
- * @param type $sql
- * @param type $inputarr
- * @param type $silent
- * @return CDbDataReader
+ * @param string $sql
+ * @param array $inputarr
+ * @param boolean $silent
+ * @return CDbDataReader|boolean
  */
 function dbExecuteAssoc($sql,$inputarr=false,$silent=true)
 {
@@ -58,6 +58,9 @@ function dbQueryOrFalse($sql)
 }
 
 
+/**
+ * @param string $sql
+ */
 function dbSelectLimitAssoc($sql,$numrows=0,$offset=0,$inputarr=false,$dieonerror=true)
 {
     $query = Yii::app()->db->createCommand($sql.= " ");

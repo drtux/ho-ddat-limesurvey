@@ -524,7 +524,7 @@ class Survey extends LSActiveRecord
     * @access public
     * @param int $iSurveyID
     * @param bool @recursive
-    * @return void
+    * @return boolean
     */
     public function deleteSurvey($iSurveyID, $recursive=true)
     {
@@ -989,7 +989,7 @@ class Survey extends LSActiveRecord
         );
         $sort->defaultOrder = array('creation_date' => CSort::SORT_DESC);
 
-        $criteria = new CDbCriteria;
+        $criteria = new LSDbCriteria;
         $aWithRelations = array('correct_relation_defaultlanguage');
 
         // Search filter
@@ -1016,11 +1016,27 @@ class Survey extends LSActiveRecord
 
                 if($this->active == "E")
                 {
+                    $criteria->compare("t.active",'Y');
                     $criteria->addCondition("t.expires <'$sNow'");
                 }
                 if($this->active == "S")
                 {
+                    $criteria->compare("t.active",'Y');
                     $criteria->addCondition("t.startdate >'$sNow'");
+                }
+                if($this->active == "R")
+                {
+                    $now = new CDbExpression("NOW()");
+
+                    $criteria->compare("t.active",'Y');
+                    $subCriteria1 = new CDbCriteria;
+                    $subCriteria2 = new CDbCriteria;
+                    $subCriteria1->addCondition($now.' > t.startdate', 'OR');
+                    $subCriteria2->addCondition($now.' < t.expires', 'OR');
+                    $subCriteria1->addCondition('t.expires IS NULL', "OR");
+                    $subCriteria2->addCondition('t.startdate IS NULL', "OR");
+                    $criteria->mergeWith($subCriteria1);
+                    $criteria->mergeWith($subCriteria2);
                 }
             }
         }
@@ -1042,7 +1058,7 @@ class Survey extends LSActiveRecord
             $criteriaPerm->compare('permissions.read_p', '1', false, 'OR');
             $criteria->mergeWith($criteriaPerm, 'AND');
         }
-
+        // $criteria->addCondition("t.blabla == 'blub'");
         $dataProvider=new CActiveDataProvider('Survey', array(
             'sort'=>$sort,
             'criteria'=>$criteria,
@@ -1112,7 +1128,7 @@ class Survey extends LSActiveRecord
     /**
     * Method to make an approximation on how long a survey will last
     * Approx is 3 questions each minute.
-    * @return int
+    * @return double
     */
     public function calculateEstimatedTime ()
     {
@@ -1133,5 +1149,16 @@ class Survey extends LSActiveRecord
         $subQuestions = intval(($subQuestions - $baseQuestions) / 2);
         $subQuestions = $subQuestions < 0 ? 0 : $subQuestions;
         return ceil(($subQuestions + $baseQuestions)*$time_per_question);
+    }
+
+    /**
+     * Get all surveys that has participant table
+     * @return Survey[]
+     */
+    public static function getSurveysWithTokenTable()
+    {
+        $surveys = self::model()->with(array('languagesettings'=>array('condition'=>'surveyls_language=language'), 'owner'))->findAll();
+        $surveys = array_filter($surveys, function($s) { return tableExists('{{tokens_' . $s->sid); });
+        return $surveys;
     }
 }

@@ -51,7 +51,7 @@
         );
 
         if ($iDateFormat > 12 || $iDateFormat<0) {
-            $iDateFormat = 11;   // TODO - what should default be?
+            $iDateFormat = 6;
         }
         if ($iDateFormat >0)
         {
@@ -116,6 +116,13 @@
         $supportedLanguages['be']['rtl'] = false;
         $supportedLanguages['be']['dateformat'] = 1;
         $supportedLanguages['be']['radixpoint'] = 1;
+
+        // Bengali
+        $supportedLanguages['bn']['description'] = gT('Bengali');
+        $supportedLanguages['bn']['nativedescription'] = '&#2476;&#2494;&#2434;&#2482;&#2494;';
+        $supportedLanguages['bn']['rtl'] = false;
+        $supportedLanguages['bn']['dateformat'] = 2;
+        $supportedLanguages['bn']['radixpoint'] = 0;
 
         // Bosnian
         $supportedLanguages['bs']['description'] = gT('Bosnian');
@@ -728,7 +735,7 @@
     /**
     * Convert a 'dateformat' format string to a 'phpdate' format.
     *
-    * @param $sDateformat string
+    * @param string $sDateformat string
     * @returns string
     *
     */

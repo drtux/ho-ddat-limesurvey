@@ -278,7 +278,7 @@ class index extends CAction {
             $redata = compact(array_keys(get_defined_vars()));
             $asMessage = array(
             gT("Error"),
-            gT("This survey is no longer available."),
+            gT("We are sorry but the survey is expired and no longer available."),
             sprintf(gT("Please contact %s ( %s ) for further assistance."),$thissurvey['adminname'],$thissurvey['adminemail'])
             );
 
@@ -334,7 +334,7 @@ class index extends CAction {
                 $sLoadSecurity=Yii::app()->request->getPost('loadsecurity');
                 $captcha = Yii::app()->getController()->createAction('captcha');
                 $captchaCorrect = $captcha->validate( $sLoadsecurity, false);
-            
+
                 if(empty($sLoadSecurity))
                 {
                     $errormsg .= gT("You did not answer to the security question.")."<br />\n";
@@ -406,7 +406,7 @@ class index extends CAction {
             } else {
                 $tokenInstance = Token::model($surveyid)->usable()->incomplete()->findByAttributes(array('token' => $token));
             }
-            if (!isset($tokenInstance))
+            if (empty($tokenInstance))
             {
                 $oToken = Token::model($surveyid)->findByAttributes(array('token' => $token));
                 if($oToken)

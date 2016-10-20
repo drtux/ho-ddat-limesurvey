@@ -456,7 +456,7 @@ function addtoarray_single($array1, $array2)
 * If $quotaexit is set to true then the user exited the survey due to a quota
 * restriction and the according token is only marked as 'Q'
 *
-* @param mixed $quotaexit
+* @param boolean $quotaexit
 */
 function submittokens($quotaexit=false)
 {
@@ -478,6 +478,7 @@ function submittokens($quotaexit=false)
 
     // check how many uses the token has left
     $token = Token::model($surveyid)->findByAttributes(array('token' => $clienttoken));
+    $token->scenario = 'FinalSubmit';  // Do not XSS filter token data
 
     if ($quotaexit==true)
     {
@@ -591,7 +592,26 @@ function submittokens($quotaexit=false)
                         }
                     }
                 }
-                SendEmailMessage($message, $subject, $sToAddress, $from, $sitename, $ishtml, null, $aRelevantAttachments);
+                $event = new PluginEvent('beforeTokenEmail');
+                $event->set('survey', $surveyid);
+                $event->set('type', 'confirm');
+                $event->set('model', 'confirm');
+                $event->set('subject', $subject);
+                $event->set('to', $sToAddress);
+                $event->set('body', $message);
+                $event->set('from', $from);
+                $event->set('bounce', getBounceEmail($surveyid));
+                $event->set('token', $token->attributes);
+                App()->getPluginManager()->dispatchEvent($event);
+                $subject = $event->get('subject');
+                $message = $event->get('body');
+                $to = $event->get('to');
+                $from = $event->get('from');
+                $bounce = $event->get('bounce');
+                if ($event->get('send', true) != false)
+                {
+                    SendEmailMessage($message, $subject, $to, $from, Yii::app()->getConfig("sitename"), $ishtml, $bounce, $aRelevantAttachments);
+                }
             }
      //   } else {
                 // Leave it to send optional confirmation at closed token
@@ -879,7 +899,7 @@ function buildsurveysession($surveyid,$preview=false)
     }
 
     $thissurvey = getSurveyInfo($surveyid,$sLangCode);
-    
+
     if ($thissurvey['nokeyboard']=='Y')
     {
         includeKeypad();
@@ -902,7 +922,7 @@ function buildsurveysession($surveyid,$preview=false)
 
     /**
     * This method has multiple outcomes that virtually do the same thing
-    * Possible scenarios/subscenarios are => 
+    * Possible scenarios/subscenarios are =>
     *   - No token required & no captcha required
     *   - No token required & captcha required
     *       > captcha may be wrong
@@ -916,7 +936,7 @@ function buildsurveysession($surveyid,$preview=false)
         "captchaRequired" => (isCaptchaEnabled('surveyaccessscreen',$thissurvey['usecaptcha']) && !isset($_SESSION['survey_'.$surveyid]['captcha_surveyaccessscreen']))
     );
 
-    /** 
+    /**
     *   Set subscenarios depending on scenario outcome
     */
     $subscenarios = array(
@@ -933,9 +953,9 @@ function buildsurveysession($surveyid,$preview=false)
             $oTokenEntry = Token::model($surveyid)->usable()->incomplete()->findByAttributes(array('token' => $clienttoken));
         }
 
-        $subscenarios['tokenValid'] = isset($oTokenEntry);
+        $subscenarios['tokenValid'] = ((!empty($oTokenEntry) && ($clienttoken != "")));
     }
-    else 
+    else
     {
         $subscenarios['tokenValid'] = true;
     }
@@ -948,7 +968,7 @@ function buildsurveysession($surveyid,$preview=false)
         $captcha = Yii::app()->getController()->createAction('captcha');
         $subscenarios['captchaCorrect'] = $captcha->validate($loadsecurity, false);
     }
-    else 
+    else
     {
         $subscenarios['captchaCorrect'] = true;
         $loadsecurity = false;
@@ -981,10 +1001,25 @@ function buildsurveysession($surveyid,$preview=false)
     $FlashError = "";
 
     // Scenario => Captcha required
-   if($scenarios['captchaRequired'] && !$preview)
-    {
-        list($renderCaptcha, $FlashError) = testCaptcha($aEnterTokenData, $subscenarios, $surveyid, $loadsecurity);
+    if($scenarios['captchaRequired'] && !$preview) {
+        $FlashError = '';
+
+        //Apply the captchaEnabled flag to the partial
+        $aEnterTokenData['bCaptchaEnabled'] = true;
+        // IF CAPTCHA ANSWER IS NOT CORRECT OR NOT SET
+        if (!$subscenarios['captchaCorrect']) {
+            if ($loadsecurity) {
+                // was a bad answer
+                $FlashError.=gT("Your answer to the security question was not correct - please try again.")."<br/>\n";
+            }
+            $renderCaptcha='main';
+        }
+        else {
+            $_SESSION['survey_'.$surveyid]['captcha_surveyaccessscreen']=true;
+            $renderCaptcha='correct';
+        }
     }
+
     // Scenario => Token required
     if ($scenarios['tokenRequired'] && !$preview){
         //Test if token is valid
@@ -1142,6 +1177,7 @@ function checkPassthruLabel($surveyid, $preview, $fieldmap)
 
 /**
  * Prefill startvalues from command line param
+ * @param integer $surveyid
  * @return void
  */
 function prefillFromCommandLine($surveyid)
@@ -1173,6 +1209,7 @@ function prefillFromCommandLine($surveyid)
 
 /**
  * @param array $fieldmap
+ * @param integer $surveyid
  * @return void
  */
 function initFieldArray($surveyid, array $fieldmap)
@@ -1250,7 +1287,8 @@ function initFieldArray($surveyid, array $fieldmap)
  * @param array $subscenarios
  * @param int $surveyid
  * @param boolean $loadsecurity
- * @return array ($renderCaptcha, $FlashError)
+ * @todo This does not work for some reason, copied the code back. See bug #11739.
+ * @return string[] ($renderCaptcha, $FlashError)
  */
 function testCaptcha(array $aEnterTokenData, array $subscenarios, $surveyid, $loadsecurity)
 {
@@ -1493,7 +1531,7 @@ function finalizeRandomization($fieldmap)
  * @param array $thissurvey
  * @param array $aEnterTokenData
  * @param string $clienttoken
- * @return array ($renderToken, $FlashError)
+ * @return string[] ($renderToken, $FlashError)
  */
 function testIfTokenIsValid(array $subscenarios, array $thissurvey, array $aEnterTokenData, $clienttoken)
 {
@@ -1777,7 +1815,7 @@ function surveymover()
 * Caculate assessement scores
 *
 * @param mixed $surveyid
-* @param mixed $returndataonly - only returns an array with data
+* @param boolean $returndataonly - only returns an array with data
 */
 function doAssessment($surveyid, $returndataonly=false)
 {
@@ -1939,6 +1977,7 @@ function doAssessment($surveyid, $returndataonly=false)
 * A list of groups in this survey, ordered by group name.
 * @param int surveyid
 * @param string language
+* @param integer $surveyid
 */
 function UpdateGroupList($surveyid, $language)
 {
@@ -2322,7 +2361,7 @@ function resetTimers()
 * Control if language exist in this survey, else set to survey default language
 * if $surveyid <= 0 : set the language to default site language
 * @param int $surveyid
-* @param string $language
+* @param string $sLanguage
 */
 function SetSurveyLanguage($surveyid, $sLanguage)
 {
@@ -2333,9 +2372,11 @@ function SetSurveyLanguage($surveyid, $sLanguage)
     {
         $default_survey_language= Survey::model()->findByPk($surveyid)->language;
         $additional_survey_languages = Survey::model()->findByPk($surveyid)->getAdditionalLanguages();
-        if (!isset($sLanguage) || ($sLanguage=='')
-        || !( in_array($sLanguage,$additional_survey_languages) || $sLanguage==$default_survey_language)
-        )
+        if (
+            empty($sLanguage)                                       //check if there
+            || (!in_array($sLanguage, $additional_survey_languages))  //Is the language in the survey-language array
+            || ($default_survey_language == $sLanguage)              //Is the $default_language the chosen language?
+         )
         {
             // Language not supported, fall back to survey's default language
             $_SESSION['survey_'.$surveyid]['s_lang'] = $default_survey_language;
